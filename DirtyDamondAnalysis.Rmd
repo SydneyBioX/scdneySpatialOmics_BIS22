@@ -94,7 +94,7 @@ We should check to see if the marker intensities of each cell require some form 
 # Extract marker data and bind with information about images
 df <- as.data.frame(cbind(colData(cells), t(assay(cells, "counts"))))
 # Plots densities of PanKRT for each image.
-ggplot(df, aes(x = CD68, colour = image_name)) + 
+ggplot(df, aes(x = sqrt(SMA), colour = image_name)) + 
   geom_density() + 
   theme(legend.position = "none")
 ```
@@ -107,7 +107,7 @@ We can transform and normalise our data using the `normalizeCells` function. Her
 # Transform and normalise the marker expression of each cell type.
 # Use a square root transform, then trimmed the 99 quantile 
 cells <- normalizeCells(cells, 
-                        transformation = "asinh", 
+                        transformation = "sqrt", 
                         method = c("trim99", "mean", "PC1"), 
                         assayIn = "counts", 
                         cores = nCores,
@@ -116,7 +116,7 @@ cells <- normalizeCells(cells,
 # Extract normalised marker information.
 df <- as.data.frame(cbind(colData(cells), t(assay(cells, "norm"))))
 # Plots densities of normalised PanKRT for each image.
-ggplot(df, aes(x = PDX1, colour = image_name)) + 
+ggplot(df, aes(x = CD45, colour = image_name)) + 
   geom_density() + 
   theme(legend.position = "none")
 ```
