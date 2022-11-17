@@ -24,7 +24,7 @@ library(spicyR)
 It is convenient to set the number of cores for running code in parallel. Please choose a number that is appropriate for your resources. Some functions will just need the number of cores, `nCores`, some will need a `BPPARAM` object from the `BiocParallel` package.
 
 ```{r}
-nCores <- 20
+nCores <- 4
 BPPARAM <- simpleSeg:::generateBPParam(nCores)
 theme_set(theme_classic())
 ```
@@ -34,7 +34,7 @@ theme_set(theme_classic())
 
 In the following we will reanalyse some Imaging Mass Cytometry (IMC) data [(Damond et al, 2019)](https://www.cell.com/cell-metabolism/fulltext/S1550-4131(18)30691-0) profiling the spatial landscape of pancreatic islets in subjects with long-duration diabetes, recent onset diabetes and controls. The key conclusion of this manuscript (amongst others) is that spatial organisation of cells is indicative of diabetes progress. We will use our spicy workflow to make a similar conclusion.
 
-The R code for this analysis is available on github XXX [https://github.com/SydneyBioX/spicyWorkflow](https://github.com/SydneyBioX/spicyWorkflow). 
+The R code for this analysis is available on github XXX
 
 
 # Download data
@@ -87,7 +87,7 @@ scater::plotReducedDim(cells, dimred="UMAP_raw", colour_by = "image_name")
 
 # Normalize data
 
-We should check to see if the marker intensities of each cell require some form of transformation or normalisation. Here we extract the intensities from the `counts` assay. Looking at PanKRT which should be expressed in the majority of the tumour cells, the intensities are clearly very skewed.
+We should check to see if the marker intensities of each cell require some form of transformation or normalisation. Here we extract the intensities from the `counts` assay. Looking at SMA which should be expressed in the majority of the stromal cells, the intensities are clearly very skewed and the peaks of the lower intensities don't overlap.
 
 
 ```{r, fig.width=5, fig.height=5}
@@ -100,14 +100,16 @@ ggplot(df, aes(x = sqrt(SMA), colour = image_name)) +
 ```
 
 
-We can transform and normalise our data using the `normalizeCells` function. Here we have taken the intensities from the `counts` assay, performed a square root transform, then for each image trimmed the 99 quantile and min-max scaled to 0-1. This modified data is then store in the `norm` assay by default. We can see that this normalised data appears more bimodal, not perfect, but likely sufficient for clustering.
+We can transform and normalise our data using the `normalizeCells` function. Here we have taken the intensities from the `counts` assay, performed an inverse hyperbolic sine transform, then for each image trimmed the 99 quantile, scaled the means to be equal and then removed the first principal component. This modified data is then store in the `norm` assay by default. We can see that this normalised data appears to align more, not perfect, but likely sufficient for clustering.
+
+### QUESTION Do different normalisations looks different? What about different markers?
 
 
 ```{r, fig.width=5, fig.height=5}
 # Transform and normalise the marker expression of each cell type.
 # Use a square root transform, then trimmed the 99 quantile 
 cells <- normalizeCells(cells, 
-                        transformation = "sqrt", 
+                        transformation = "asinh", 
                         method = c("trim99", "mean", "PC1"), 
                         assayIn = "counts", 
                         cores = nCores,
@@ -116,18 +118,29 @@ cells <- normalizeCells(cells,
 # Extract normalised marker information.
 df <- as.data.frame(cbind(colData(cells), t(assay(cells, "norm"))))
 # Plots densities of normalised PanKRT for each image.
-ggplot(df, aes(x = CD45, colour = image_name)) + 
+ggplot(df, aes(x = SMA, colour = image_name)) + 
   geom_density() + 
   theme(legend.position = "none")
 ```
 
+# FuseSOM: Cluster cells into cell types
+
+We'd like to annotated cells as different cell types.
+
+Our FuseSOM R package on [Bioconductor](http://www.bioconductor.org/packages/release/bioc/html/FuseSOM.html) provides a pipeline for the clustering cells in highly multiplexed in situ imaging cytometry assays. This pipeline uses the Self Organizing Map architecture coupled with Multiview hierarchical clustering and provides functions for the estimation of the number of clusters.
+
+
+## Marker selection
+
+First, let's select the markers that we'd like to use to cluster the cells. Clustering partitions the data by the largest sources of variation. If there are lots of markers for a specific cell type, this will cluster very well.  
 
 ```{r}
 
 # Order the markers sensibly
 
-useMarkers <- c("INS",	#Insulin	β	141Pr
-"PIN",	#Proinsulin	β	154Sm
+useMarkers <- c(
+#"INS",	#Insulin	β	141Pr
+#"PIN",	#Proinsulin	β	154Sm
 "NKX6_1", #	Homeobox protein Nkx-6.1	β	169Tm
 "IAPP", #	Amylin	β	167Er
 "GCG", #	Glucagon	α	156Gd
@@ -166,7 +179,10 @@ useMarkers <- c("INS",	#Insulin	β	141Pr
 
 
 
-## Perform the clustering
+## Perform clustering
+
+Here we cluster using the `runFuseSOM` function. We have chosen to specify the same subset of markers used in the original manuscript for gating cell types. We have also specified the number of clusters to identify to be `numClusters = 19`. In addtion to this, while FuseSOM can automatically estimate a grid size for the self organising map, we have set the grid size to be `size = 10` to specify a 10 by 10 grid that should allow for smaller cell subsets to be identified.
+
 ```{r}
 # Set seed.
 set.seed(51773)
@@ -174,14 +190,21 @@ set.seed(51773)
 cells <- runFuseSOM(cells, 
                     markers = useMarkers, 
                     assay = 'norm', 
-                    numClusters = 20)
+                    numClusters = 13)
 ```
+## Check how many clusters should be used.
+
+We can check to see how reasonable our choice of 14 clusters is using the `estimateNumCluster` and the `optiPlot` functions. Here we examine the Gap method, others such as Silhouette and Within Cluster Distance are also available.
+
 
 ```{r}
 cells <- estimateNumCluster(cells, kSeq = 2:30)
-optiPlot(cells, method = "silhouette")
+optiPlot(cells, method = "gap")
 cells@metadata$clusterEstimation$Discriminant
 ```
+## Attempt to interpret the phenotype of each cluster
+
+We can begin the process of understanding what each of these cell clusters are by using the `plotGroupedHeatmap` function from `scater`. At the least, here we can see we capture a few different populations of islet cells and a few immune cell populates (including CD4+ Tcells and CD8+ Tcells).
 
 
 
@@ -197,8 +220,11 @@ scater::plotGroupedHeatmap(cells,
 )
 ```
 
-```{r}
-regionMap(cells,cellType = "clusters", region = "patient_stage")
+
+Damond et al define their cell types using a step wise clustering procedure with manual merge of clusters. We can compare our clustering to theirs.
+
+```{r fig.width=8}
+regionMap(cells,cellType = "clusters", region = "cell_type") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 ```
 
 ## Check cluster frequencies
@@ -212,6 +238,11 @@ colData(cells)$clusters |>
   sort()
 ```
 
+## Visualise cell types in an image
+
+Look at the distribution of cells types in an image
+
+
 ```{r}
 # Extract cell information and filter to specific image.
 df <- cbind(colData(cells), spatialCoords(cells)) |>
@@ -221,6 +252,65 @@ dplyr::filter(image_name == "E02")
 ggplot(df, aes(x = cell_x, y = cell_y, colour = clusters)) +
   geom_point()
 ```
+
+### QUESTIONS Does changing the normalisation affect the clustering? Does changing the number of clusters? 
+
+
+
+# Test For association between the proportion of each cell type and progression status
+
+We recommend using a package such as `diffcyt` for testing for changes in abundance of cell types. However, the `colTest` function allows us to quickly test for associations between the proportions of the cell types and disease status using either Wilcoxon rank sum tests or t-tests. Here we see a couple of p-values less than 0.05.
+
+```{r}
+# Select cells which belong to Non-diabetic individuals and those with recent onset diabetes.
+cellsToUse <- cells$patient_stage%in%c("Non-diabetic", "Onset")
+# Perform simple t tests on the columns of the proportion matrix.
+testProp <- colTest(cells[, cellsToUse], 
+                    condition = "patient_stage", 
+                    feature = "clusters",
+                    imageID = "image_name")
+testProp
+```
+
+
+
+
+# spicyR: test spatial relationships
+
+Our spicyR package (https://www.bioconductor.org/packages/devel/bioc/html/spicyR.html)[https://www.bioconductor.org/packages/devel/bioc/html/spicyR.html] provides a series of functions to aid in the analysis of both immunofluorescence and mass cytometry imaging data as well as other assays that can deeply phenotype individual cells and their spatial location. Here we use the `spicy` function to test for changes in the spatial relationships between pairwise combinations of cells. We quantify spatial relationships using a combination of three radii `Rs = c(20, 50, 100)` and mildly account for some global tissue structure using `sigma = 50`.
+
+```{r}
+# Select cells which belong to Non-diabetic individuals and those with recent onset diabetes.
+cellsToUse <- cells$patient_stage%in%c("Non-diabetic", "Onset")
+
+# Test for changes in pairwise spatial relationships between cell types.
+spicyTest <- spicy(cells[, cellsToUse], 
+                   condition = "patient_stage", 
+                   cellType = "clusters",
+                   imageID = "image_name",
+                   spatialCoords = c("cell_x", "cell_y"),
+                   Rs = c(20, 50, 100),
+                   sigma = 50,
+                   BPPARAM = BPPARAM)
+topPairs(spicyTest, n = 10)
+```
+
+We can visualise these tests using `signifPlot` where we observe that cell type pairs appear to become less attractive (or avoid more) SOMETHING ABOUT INTERPRATION.
+
+```{r}
+# Visualise which relationships are changing the most.
+signifPlot(spicyTest,
+           breaks = c(-1.5, 3, 0.5),
+           cutoff = 0.0001)
+```
+
+### QUESTION: Do the results/interpretation change if use Rs = 20 or Rs = 200
+
+
+
+# lisaClust: Find cellular neighbourhoods
+
+Our lisaClust package (https://www.bioconductor.org/packages/release/bioc/html/lisaClust.html)[https://www.bioconductor.org/packages/release/bioc/html/lisaClust.html] provides a series of functions to identify and visualise regions of tissue where spatial associations between cell-types is similar. This package can be used to provide a high-level summary of cell-type colocalisation in multiplexed imaging data that has been segmented at a single-cell resolution. Here we use the `lisaClust` function to clusters cells into 5 regions with distinct spatial ordering. 
 
 
 
@@ -247,13 +337,81 @@ We can try to interpret which spatial orderings the regions are quantifying usin
 regionMap(cells, cellType = "clusters", limit = c(0.2, 5))
 ```
 
+## Visualise regions
+
+By default, these identified regions are stored in the `regions` column in the `colData` of our object. We can quickly examine the spatial arrangement of these regions using `ggplot`.
+
+
+```{r}
+# Extract cell information and filter to specific image.
+df <- colData(cells) |>
+as.data.frame() |>
+filter(imageID == "Point2206_pt1116_31620")
+# Colour cells by their region.
+ggplot(df, aes(x = m.cx, y = m.cy, colour = region)) +
+  geom_point()
+```
+
+
+While much slower, we have also implemented a function for overlaying the region information as a hatching pattern so that the information can be viewed simultaneously with the cell type calls.
+
+```{r eval = FALSE}
+# Use hatching to visualise regions and cell types.
+hatchingPlot(cells,
+             useImages = "Point2206_pt1116_31620",
+             cellType = "clusters",
+             spatialCoords = c("m.cx", "m.cy")
+            )
+```
+
+
+## Test for changes in cell type proportions
+
+```{r}
+regionProp <- getProp(cells, feature = "region", imageID = "image_name")
+
+
+stage <- cells |>
+  colData() |>
+  as.data.frame() |>
+  dplyr::select("image_name", "patient_stage") |>
+  unique() |>
+  mutate(patient_stage = factor(patient_stage, levels = c("Non-diabetic",
+                                                          "Onset",
+                                                          "Long-duration")))
+
+
+df <- regionProp |>
+  mutate(image_name = rownames(regionProp)) |>
+  dplyr::right_join(stage, by = "image_name") |>
+  tidyr::pivot_longer(cols = starts_with("region"),
+                      names_to = "region",
+                      values_to = "proportion")
+
+ggplot(df, aes(x = region, y = proportion, colour = patient_stage)) + geom_boxplot()
+
+```
+## Test for changes in proportions of the regions
+
+SOMETHING ABOUT Islets with and without beta cells.
+
+```{r}
+# Select cells which belong to Non-diabetic individuals and those with recent onset diabetes.
+cellsToUse <- cells$patient_stage%in%c("Non-diabetic", "Onset")
+# Perform simple t tests on the columns of the proportion matrix.
+testRegions<- colTest(cells[, cellsToUse], 
+                    condition = "patient_stage", 
+                    feature = "region",
+                    imageID = "image_name")
+testRegions
+
+```
+
+### QUESTION do the conclusions change using more or less regions?
 
 # ClassifyR: Classification
 
-Our ClassifyR package, [https://github.com/SydneyBioX/ClassifyR](https://github.com/SydneyBioX/ClassifyR), formalises a convenient framework for evaluating classification in R. We provide functionality to easily include four key modelling stages; Data transformation, feature selection, classifier training and prediction; into a cross-validation loop. Here we use the `crossValidate` function to perform 100 repeats of 5-fold cross-validation to evaluate the performance of an elastic net model applied to three quantification of our MIBI-TOF data; cell type proportions, average mean of each cell type and region proportions.
-
-
-
+Our ClassifyR package, [https://github.com/SydneyBioX/ClassifyR](https://github.com/SydneyBioX/ClassifyR), formalises a convenient framework for evaluating classification in R. We provide functionality to easily include four key modelling stages; Data transformation, feature selection, classifier training and prediction; into a cross-validation loop. Here we use the `crossValidate` function to perform 20 repeats of 5-fold cross-validation to evaluate the performance of an randomForest applied to three quantification of our IMC data; cell type proportions, average pairwise distances between cell-types and region proportions.
 
 
 ```{r message=FALSE}
@@ -269,18 +427,20 @@ data[["dist"]] <- getPairwise(cells,
                               Rs = c(20, 50, 100),
                               sigma = 50,
                               BPPARAM = BPPARAM)
+
 data[["dist"]] <- as.data.frame(data[["dist"]])
+
 # Add proportions of each region in each image
 # to the list of dataframes.
 data[["regions"]] <- getProp(cells, feature = "region", imageID = "image_name")
 
+# Get outcome data
 df <- colData(cells)[, c("image_name", "patient_stage")]
 df <- unique(df)
 rownames(df) <- df$image_name
 
 outcome <- df$patient_stage
 names(outcome) <- df$image_name
-
 
 # Only use onset vs non-diabetic
 outcome <- outcome[outcome %in% c("Long-duration", "Onset")]
@@ -307,7 +467,7 @@ cv <- crossValidate(measurements = measurements,
 
 ## Visualise cross-validated prediction performance
 
-Here we use the `performancePlot` function to assess the AUC from each repeat of the 5-fold cross-validation. We see that the lisaClust regions appear to capture information which is predictive of progression status of the patients.
+Here we use the `performancePlot` function to assess the AUC from each repeat of the 5-fold cross-validation. We see that the lisaClust regions appear to capture information which is predictive of diabetes progression status of the patients.
 
 ```{r}
 # Calculate AUC for each cross-validation repeat and plot.
@@ -315,3 +475,7 @@ performancePlot(cv,
                 performanceName = "AUC",
                 characteristicsList = list(x = "Assay Name"))
 ```
+
+
+
+### QUESTIONS Different classifiers? Check balanced accuracy.
