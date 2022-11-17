@@ -8,6 +8,7 @@ date: "2022-11-10"
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE, warning = FALSE)
 ```
 
+Firstly, we import the libraries necessary for the analysis.
 
 ```{r}
 library(imcdatasets)
@@ -23,6 +24,8 @@ library(spicyR)
 # Global paramaters
 
 It is convenient to set the number of cores for running code in parallel. Please choose a number that is appropriate for your resources. Some functions will just need the number of cores, `nCores`, some will need a `BPPARAM` object from the `BiocParallel` package.
+
+> **Warning**: Please choose a number that is appropriate for your resources!
 
 ```{r}
 nCores <- 4
