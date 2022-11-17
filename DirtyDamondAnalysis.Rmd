@@ -5,7 +5,7 @@ date: "2022-11-10"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, warning = FALSE)
 ```
 
 
@@ -16,6 +16,7 @@ library(simpleSeg)
 library(FuseSOM)
 library(lisaClust)
 library(ClassifyR)
+library(dplyr)
 library(spicyR)
 ```
 
@@ -58,12 +59,13 @@ To make things faster and less computationally demanding, lets subset the data d
 
 set.seed(51773)
 
-useImages <- c(sample(cells$image_name[cells$patient_stage=="Non-diabetic"], 20),
-               sample(cells$image_name[cells$patient_stage=="Onset"], 20),
-               sample(cells$image_name[cells$patient_stage=="Long-duration"], 20))
+useImages <- c(
+  sample(cells$image_name[cells$patient_stage == "Non-diabetic"], 20),
+  sample(cells$image_name[cells$patient_stage == "Onset"], 20),
+  sample(cells$image_name[cells$patient_stage == "Long-duration"], 20)
+)
 
 cells <- cells[, cells$image_name %in% useImages]
-
 ```
 
 
@@ -77,8 +79,7 @@ set.seed(51773)
 cells <- scater::runUMAP(cells, exprs_values = "counts", name = "UMAP_raw")
 
 # UMAP by imageID.
-scater::plotReducedDim(cells, dimred="UMAP_raw", colour_by = "image_name")
-
+scater::plotReducedDim(cells, dimred = "UMAP_raw", colour_by = "image_name")
 ```
 
 
@@ -94,8 +95,8 @@ We should check to see if the marker intensities of each cell require some form 
 # Extract marker data and bind with information about images
 df <- as.data.frame(cbind(colData(cells), t(assay(cells, "counts"))))
 # Plots densities of PanKRT for each image.
-ggplot(df, aes(x = sqrt(SMA), colour = image_name)) + 
-  geom_density() + 
+ggplot(df, aes(x = sqrt(SMA), colour = image_name)) +
+  geom_density() +
   theme(legend.position = "none")
 ```
 
@@ -107,19 +108,19 @@ We can transform and normalise our data using the `normalizeCells` function. Her
 
 ```{r, fig.width=5, fig.height=5}
 # Transform and normalise the marker expression of each cell type.
-# Use a square root transform, then trimmed the 99 quantile 
-cells <- normalizeCells(cells, 
-                        transformation = "asinh", 
-                        method = c("trim99", "mean", "PC1"), 
-                        assayIn = "counts", 
-                        cores = nCores,
-                        imageID = "image_name"
-                        )
+# Use a square root transform, then trimmed the 99 quantile
+cells <- normalizeCells(cells,
+  transformation = "asinh",
+  method = c("trim99", "mean", "PC1"),
+  assayIn = "counts",
+  cores = nCores,
+  imageID = "image_name"
+)
 # Extract normalised marker information.
 df <- as.data.frame(cbind(colData(cells), t(assay(cells, "norm"))))
 # Plots densities of normalised PanKRT for each image.
-ggplot(df, aes(x = SMA, colour = image_name)) + 
-  geom_density() + 
+ggplot(df, aes(x = SMA, colour = image_name)) +
+  geom_density() +
   theme(legend.position = "none")
 ```
 
@@ -139,42 +140,41 @@ First, let's select the markers that we'd like to use to cluster the cells. Clus
 # Order the markers sensibly
 
 useMarkers <- c(
-#"INS",	#Insulin	β	141Pr
-#"PIN",	#Proinsulin	β	154Sm
-"NKX6_1", #	Homeobox protein Nkx-6.1	β	169Tm
-"IAPP", #	Amylin	β	167Er
-"GCG", #	Glucagon	α	156Gd
-"PCSK2",	#Proprotein convertase 2	α	144Nd
-"SST",	#Somatostatin	δ	159Tb
-"PPY",	#Pancreatic polypeptide	γ	153Eu
-"PDX1",	#Pancreatic and duodenal homeobox 1	β, δ, ductal	158Gd
-"SYP",	#Synaptophysin	Endocrine	160Gd
-"CD99",	#CD99	Endocrine	145Nd
-"SLC2A1",	#Glucose transporter 1	Endocrine	148Nd
-"PTPRN",	#Receptor-type tyrosine-protein phosphatase-like N	Endocrine	174Yb
-"AMY2A",	#Pancreatic amylase	Acinar	150Nd
-"KRT19",	#Cytokeratin 19	Ductal	161Dy
-"CD44",	#CD44	Exocrine	143Nd
-"CD45",	#CD45	Immune	162Dy
-"CD45RA",	#CD45RA	Immune	164Dy
-"CD3e",	#CD3ɛ	T	152Sm
-"CD4",	#CD4	Helper T	171Yb
-"CD8a",	#CD8a	Cytotoxic T	165Ho
-"CD20",	#CD20	B	149Sm
-"CD68",	#CD68	Monocytes, macrophages	146Nd
-"MPO",	#Myeloperoxidase	Neutrophils	147Sm
-"FOXP3",	#Forkhead box P3	Regulatory T	163Dy
-"CD38",	#CD38	Immune	142Nd
-"CDH1",	#E-/P-cadherin	Epithelial	173Yb
-"CD31",	#CD31	Endothelial	172Yb
-"SMA",	#Smooth muscle actin	Stromal	115In
-"Ki67",	#Ki-67	Proliferating	168Er
-"p_HH3",	#Phospho-histone H3	Proliferating	170Er
-"p_Rb",	#Phospho-retinoblastoma	Cycling	175Yb
-"cPARP_cCASP3",	#Cleaved caspase 3 + cleaved poly (ADP-ribose) polymerase	Apoptotic	176Yb
-"CA9")	#Carbonic anhydrase IX	Hypoxic	166Er
-
-
+  # "INS",	#Insulin	β	141Pr
+  # "PIN",	#Proinsulin	β	154Sm
+  "NKX6_1", # 	Homeobox protein Nkx-6.1	β	169Tm
+  "IAPP", # 	Amylin	β	167Er
+  "GCG", # 	Glucagon	α	156Gd
+  "PCSK2", # Proprotein convertase 2	α	144Nd
+  "SST", # Somatostatin	δ	159Tb
+  "PPY", # Pancreatic polypeptide	γ	153Eu
+  "PDX1", # Pancreatic and duodenal homeobox 1	β, δ, ductal	158Gd
+  "SYP", # Synaptophysin	Endocrine	160Gd
+  "CD99", # CD99	Endocrine	145Nd
+  "SLC2A1", # Glucose transporter 1	Endocrine	148Nd
+  "PTPRN", # Receptor-type tyrosine-protein phosphatase-like N	Endocrine	174Yb
+  "AMY2A", # Pancreatic amylase	Acinar	150Nd
+  "KRT19", # Cytokeratin 19	Ductal	161Dy
+  "CD44", # CD44	Exocrine	143Nd
+  "CD45", # CD45	Immune	162Dy
+  "CD45RA", # CD45RA	Immune	164Dy
+  "CD3e", # CD3ɛ	T	152Sm
+  "CD4", # CD4	Helper T	171Yb
+  "CD8a", # CD8a	Cytotoxic T	165Ho
+  "CD20", # CD20	B	149Sm
+  "CD68", # CD68	Monocytes, macrophages	146Nd
+  "MPO", # Myeloperoxidase	Neutrophils	147Sm
+  "FOXP3", # Forkhead box P3	Regulatory T	163Dy
+  "CD38", # CD38	Immune	142Nd
+  "CDH1", # E-/P-cadherin	Epithelial	173Yb
+  "CD31", # CD31	Endothelial	172Yb
+  "SMA", # Smooth muscle actin	Stromal	115In
+  "Ki67", # Ki-67	Proliferating	168Er
+  "p_HH3", # Phospho-histone H3	Proliferating	170Er
+  "p_Rb", # Phospho-retinoblastoma	Cycling	175Yb
+  "cPARP_cCASP3", # Cleaved caspase 3 + cleaved poly (ADP-ribose) polymerase	Apoptotic	176Yb
+  "CA9"
+) # Carbonic anhydrase IX	Hypoxic	166Er
 ```
 
 
@@ -187,10 +187,11 @@ Here we cluster using the `runFuseSOM` function. We have chosen to specify the s
 # Set seed.
 set.seed(51773)
 # Generate SOM and cluster cells into 20 groups.
-cells <- runFuseSOM(cells, 
-                    markers = useMarkers, 
-                    assay = 'norm', 
-                    numClusters = 13)
+cells <- runFuseSOM(cells,
+  markers = useMarkers,
+  assay = "norm",
+  numClusters = 13
+)
 ```
 ## Check how many clusters should be used.
 
@@ -224,7 +225,8 @@ scater::plotGroupedHeatmap(cells,
 Damond et al define their cell types using a step wise clustering procedure with manual merge of clusters. We can compare our clustering to theirs.
 
 ```{r fig.width=8}
-regionMap(cells,cellType = "clusters", region = "cell_type") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+regionMap(cells, cellType = "clusters", region = "cell_type") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 ```
 
 ## Check cluster frequencies
@@ -246,8 +248,8 @@ Look at the distribution of cells types in an image
 ```{r}
 # Extract cell information and filter to specific image.
 df <- cbind(colData(cells), spatialCoords(cells)) |>
-as.data.frame() |>
-dplyr::filter(image_name == "E02")
+  as.data.frame() |>
+  filter(image_name == "E02")
 # Colour cells by their region.
 ggplot(df, aes(x = cell_x, y = cell_y, colour = clusters)) +
   geom_point()
@@ -263,12 +265,13 @@ We recommend using a package such as `diffcyt` for testing for changes in abunda
 
 ```{r}
 # Select cells which belong to Non-diabetic individuals and those with recent onset diabetes.
-cellsToUse <- cells$patient_stage%in%c("Non-diabetic", "Onset")
+cellsToUse <- cells$patient_stage %in% c("Non-diabetic", "Onset")
 # Perform simple t tests on the columns of the proportion matrix.
-testProp <- colTest(cells[, cellsToUse], 
-                    condition = "patient_stage", 
-                    feature = "clusters",
-                    imageID = "image_name")
+testProp <- colTest(cells[, cellsToUse],
+  condition = "patient_stage",
+  feature = "clusters",
+  imageID = "image_name"
+)
 testProp
 ```
 
@@ -281,17 +284,18 @@ Our spicyR package (https://www.bioconductor.org/packages/devel/bioc/html/spicyR
 
 ```{r}
 # Select cells which belong to Non-diabetic individuals and those with recent onset diabetes.
-cellsToUse <- cells$patient_stage%in%c("Non-diabetic", "Onset")
+cellsToUse <- cells$patient_stage %in% c("Non-diabetic", "Onset")
 
 # Test for changes in pairwise spatial relationships between cell types.
-spicyTest <- spicy(cells[, cellsToUse], 
-                   condition = "patient_stage", 
-                   cellType = "clusters",
-                   imageID = "image_name",
-                   spatialCoords = c("cell_x", "cell_y"),
-                   Rs = c(20, 50, 100),
-                   sigma = 50,
-                   BPPARAM = BPPARAM)
+spicyTest <- spicy(cells[, cellsToUse],
+  condition = "patient_stage",
+  cellType = "clusters",
+  imageID = "image_name",
+  spatialCoords = c("cell_x", "cell_y"),
+  Rs = c(20, 50, 100),
+  sigma = 50,
+  BPPARAM = BPPARAM
+)
 topPairs(spicyTest, n = 10)
 ```
 
@@ -300,8 +304,9 @@ We can visualise these tests using `signifPlot` where we observe that cell type 
 ```{r}
 # Visualise which relationships are changing the most.
 signifPlot(spicyTest,
-           breaks = c(-1.5, 3, 0.5),
-           cutoff = 0.0001)
+  breaks = c(-1.5, 3, 0.5),
+  cutoff = 0.0001
+)
 ```
 
 ### QUESTION: Do the results/interpretation change if use Rs = 20 or Rs = 200
@@ -318,14 +323,15 @@ Our lisaClust package (https://www.bioconductor.org/packages/release/bioc/html/l
 ```{r}
 set.seed(51773)
 # Cluster cells into spatial regions with similar composition.
-cells <- lisaClust(cells, 
-                   k = 5, 
-                   Rs = c(20, 50, 100),
-                   sigma = 50,
-                   spatialCoords = c("cell_x", "cell_y"), 
-                   cellType = "clusters", 
-                   imageID = "image_name",
-                   BPPARAM = BPPARAM)
+cells <- lisaClust(cells,
+  k = 5,
+  Rs = c(20, 50, 100),
+  sigma = 50,
+  spatialCoords = c("cell_x", "cell_y"),
+  cellType = "clusters",
+  imageID = "image_name",
+  BPPARAM = BPPARAM
+)
 ```
 
 ## Region - cell type enrichment heatmap
@@ -344,11 +350,11 @@ By default, these identified regions are stored in the `regions` column in the `
 
 ```{r}
 # Extract cell information and filter to specific image.
-df <- colData(cells) |>
-as.data.frame() |>
-filter(imageID == "Point2206_pt1116_31620")
+df <- cbind(colData(cells), spatialCoords(cells)) |>
+  as.data.frame() |>
+  filter(image_name == "E02")
 # Colour cells by their region.
-ggplot(df, aes(x = m.cx, y = m.cy, colour = region)) +
+ggplot(df, aes(x = cell_x, y = cell_y, colour = region)) +
   geom_point()
 ```
 
@@ -358,10 +364,11 @@ While much slower, we have also implemented a function for overlaying the region
 ```{r eval = FALSE}
 # Use hatching to visualise regions and cell types.
 hatchingPlot(cells,
-             useImages = "Point2206_pt1116_31620",
-             cellType = "clusters",
-             spatialCoords = c("m.cx", "m.cy")
-            )
+  imageID = "image_name",
+  useImages = "E02",
+  cellType = "clusters",
+  spatialCoords = c("cell_x", "cell_y"),
+)
 ```
 
 
@@ -376,20 +383,24 @@ stage <- cells |>
   as.data.frame() |>
   dplyr::select("image_name", "patient_stage") |>
   unique() |>
-  mutate(patient_stage = factor(patient_stage, levels = c("Non-diabetic",
-                                                          "Onset",
-                                                          "Long-duration")))
+  mutate(patient_stage = factor(patient_stage, levels = c(
+    "Non-diabetic",
+    "Onset",
+    "Long-duration"
+  )))
 
 
 df <- regionProp |>
   mutate(image_name = rownames(regionProp)) |>
   dplyr::right_join(stage, by = "image_name") |>
-  tidyr::pivot_longer(cols = starts_with("region"),
-                      names_to = "region",
-                      values_to = "proportion")
+  tidyr::pivot_longer(
+    cols = starts_with("region"),
+    names_to = "region",
+    values_to = "proportion"
+  )
 
-ggplot(df, aes(x = region, y = proportion, colour = patient_stage)) + geom_boxplot()
-
+ggplot(df, aes(x = region, y = proportion, colour = patient_stage)) +
+  geom_boxplot()
 ```
 ## Test for changes in proportions of the regions
 
@@ -397,14 +408,14 @@ SOMETHING ABOUT Islets with and without beta cells.
 
 ```{r}
 # Select cells which belong to Non-diabetic individuals and those with recent onset diabetes.
-cellsToUse <- cells$patient_stage%in%c("Non-diabetic", "Onset")
+cellsToUse <- cells$patient_stage %in% c("Non-diabetic", "Onset")
 # Perform simple t tests on the columns of the proportion matrix.
-testRegions<- colTest(cells[, cellsToUse], 
-                    condition = "patient_stage", 
-                    feature = "region",
-                    imageID = "image_name")
+testRegions <- colTest(cells[, cellsToUse],
+  condition = "patient_stage",
+  feature = "region",
+  imageID = "image_name"
+)
 testRegions
-
 ```
 
 ### QUESTION do the conclusions change using more or less regions?
@@ -420,13 +431,14 @@ data <- list()
 # Add proportions of each cell type in each image
 data[["props"]] <- getProp(cells, feature = "clusters", imageID = "image_name")
 # Add pairwise associations
-data[["dist"]] <- getPairwise(cells, 
-                              spatialCoords = c("cell_x", "cell_y"),
-                              imageID = "image_name",
-                              cellType = "clusters",
-                              Rs = c(20, 50, 100),
-                              sigma = 50,
-                              BPPARAM = BPPARAM)
+data[["dist"]] <- getPairwise(cells,
+  spatialCoords = c("cell_x", "cell_y"),
+  imageID = "image_name",
+  cellType = "clusters",
+  Rs = c(20, 50, 100),
+  sigma = 50,
+  BPPARAM = BPPARAM
+)
 
 data[["dist"]] <- as.data.frame(data[["dist"]])
 
@@ -446,19 +458,20 @@ names(outcome) <- df$image_name
 outcome <- outcome[outcome %in% c("Long-duration", "Onset")]
 outcome <- factor(outcome)
 
-measurements <- lapply(data, function(x)x[names(outcome), ])
+measurements <- lapply(data, function(x) x[names(outcome), ])
 
 # Set seed
 set.seed(51773)
 # Perform cross-validation of an elastic net model
 # with 100 repeats of 5-fold cross-validation.
-cv <- crossValidate(measurements = measurements, 
-                    outcome = outcome,
-                    classifier = "randomForest",
-                    nFolds = 5,
-                    nRepeats = 20,
-                    nCores = nCores
-                    )
+cv <- crossValidate(
+  measurements = measurements,
+  outcome = outcome,
+  classifier = "randomForest",
+  nFolds = 5,
+  nRepeats = 20,
+  nCores = nCores
+)
 ```
 
 
@@ -472,8 +485,9 @@ Here we use the `performancePlot` function to assess the AUC from each repeat of
 ```{r}
 # Calculate AUC for each cross-validation repeat and plot.
 performancePlot(cv,
-                performanceName = "AUC",
-                characteristicsList = list(x = "Assay Name"))
+  performanceName = "AUC",
+  characteristicsList = list(x = "Assay Name")
+)
 ```
 
 
