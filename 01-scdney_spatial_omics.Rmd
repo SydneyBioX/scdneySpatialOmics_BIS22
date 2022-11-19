@@ -6,6 +6,7 @@ author:
 - name: Shila Ghazanfar
   affiliation:  
   - School of Mathematics and Statistics, University of Sydney, Australia
+  - Charles Perkins Centre, University of Sydney, Australia
 - name: Nicholas Robertson
   affiliation:
   - School of Mathematics and Statistics, University of Sydney, Australia
@@ -31,6 +32,10 @@ library(BiocStyle)
 <br />
 **Bioconductor version**: `r BiocManager::version()`
 <br />
+
+# Part I: Data structures and exploratory data analysis
+
+
 
 # Loading R packages
 
