@@ -6,7 +6,14 @@ Materials for 'Unlocking single cell spatial omics analyses with `scdney`' works
 Before coming to the workshop, you must have the latest version of R installed 
 (or at least version 4.2), paired with your favourite IDE (e.g. 
 [RStudio](https://posit.co/download/rstudio-desktop/)) and/or git for 
-downloading the workshop materials.
+downloading the workshop materials. You will also need the latest version of
+Bioconductor installed, you can do this by running:
+
+```r
+# if BiocManager not installed
+install.packages("BiocManager")
+BiocManager::install(version = "3.16")
+```
 
 ### Installing `scdney`
 

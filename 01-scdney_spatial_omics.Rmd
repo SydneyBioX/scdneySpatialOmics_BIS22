@@ -19,7 +19,6 @@ output:
   BiocStyle::html_document
 ---
 
-
 ```{r setup, include=FALSE, message=FALSE}
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE, message = FALSE, warning = FALSE, cache.lazy = FALSE)
 library(BiocStyle)
@@ -35,6 +34,18 @@ library(BiocStyle)
 
 # Part I: Data structures and exploratory data analysis
 
+## 
+
+
+```{r}
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("STexampleData")
+
+out = STexampleData::seqFISH_mouseEmbryo()
+
+```
 
 
 # Loading R packages
