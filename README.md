@@ -1,4 +1,4 @@
-# scdneySpatialOmics_BIS22
+# Unlocking single cell spatial omics analyses with `scdney`
 Materials for 'Unlocking single cell spatial omics analyses with `scdney`' workshop presented at [BioInfoSummer 2022](https://bis.amsi.org.au/program/).
 
 ## Prerequisites
