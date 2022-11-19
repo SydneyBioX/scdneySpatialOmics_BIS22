@@ -1,0 +1,88 @@
+---
+title: "Unlocking single cell spatial omics analyses with scdney"
+params:
+  test: FALSE
+author:
+- name: Shila Ghazanfar
+  affiliation:  
+  - School of Mathematics and Statistics, University of Sydney, Australia
+- name: Nicholas Robertson
+  affiliation:
+  - School of Mathematics and Statistics, University of Sydney, Australia
+- name: Ellis Patrick
+  affiliation:
+  - &WIMR Westmead Institute for Medical Research, University of Sydney, Australia
+  - School of Mathematics and Statistics, University of Sydney, Australia
+date: 21 November, 2022
+output: 
+  BiocStyle::html_document
+---
+
+
+```{r setup, include=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, message = FALSE, warning = FALSE, cache.lazy = FALSE)
+library(BiocStyle)
+```
+
+# Version Info
+
+<p>
+**R version**: `r R.version.string`
+<br />
+**Bioconductor version**: `r BiocManager::version()`
+<br />
+
+# Loading R packages
+
+```{r, echo=FALSE, results="hide", warning=FALSE}
+suppressPackageStartupMessages({
+library(scdney)
+# library(dplyr)
+# library(ggplot2)
+# library(simpleSeg)
+# library(FuseSOM)
+# library(ggpubr)
+# library(scater)
+# library(spicyR)
+# library(ClassifyR)
+# library(lisaClust)
+})
+```
+
+```{r, eval=FALSE}
+library(scdney)
+```
+
+# Global paramaters
+
+It is convenient to set the number of cores for running code in parallel. Please choose a number that is appropriate for your resources.
+
+```{r}
+# nCores <- 20
+# BPPARAM <- simpleSeg:::generateBPParam(nCores)
+# theme_set(theme_classic())
+```
+
+# Context
+
+In the following we will reanalyse some MIBI-TOF data [(Risom et al, 2022)](https://www.sciencedirect.com/science/article/pii/S0092867421014860?via%3Dihub#!) profiling the spatial landscape of ductal carcinoma in situ (DCIS), which is a pre-invasive lesion that is thought to be a precursor to invasive breast cancer (IBC). The key conclusion of this manuscript (amongst others) is that spatial information about cells can be used to predict disease progression in patients. We will use our spicy workflow to make a similar conclusion.
+
+The R code for this analysis is available on github [https://github.com/SydneyBioX/spicyWorkflow](https://github.com/SydneyBioX/spicyWorkflow). A mildly [processed](https://github.com/SydneyBioX/spicyWorkflow/blob/master/organisePublishedData.R) version of the data used in the manuscript is available in this repository. 
+
+
+
+# Read in images
+
+The images are stored in the `images` folder within the `data` folder. Here we use `readImages()` from the `EBImage` package to read these into R. If memory is a restricting factor, and the files are in a slightly different format, you could use `loadImages()` from the `cytomapper` package to load all the tiff images into a `CytoImageList` object, which can store the images as h5 on-disk.
+
+
+
+
+
+
+
+
+# Summary
+
+Here we have used a pipeline of our spatial analysis R packages to demonstrate an easy way to segment, cluster, normalise, quantify and classify high dimensional in situ cytometry data all within R.
+Footer
