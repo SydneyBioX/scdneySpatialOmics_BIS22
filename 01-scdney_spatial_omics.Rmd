@@ -25,6 +25,7 @@ output:
     number_sections: true
     toc_depth: 3
     toc_float: yes
+    self_contained: true
 editor_options: 
   markdown: 
     wrap: 72
