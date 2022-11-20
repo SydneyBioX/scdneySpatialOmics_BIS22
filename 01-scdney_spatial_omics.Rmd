@@ -79,7 +79,7 @@ suppressPackageStartupMessages({
   library(ClassifyR)
 })
 
-nCores <- 4
+nCores <- 1
 BPPARAM <- simpleSeg:::generateBPParam(nCores)
 
 theme_set(theme_classic())
@@ -611,7 +611,7 @@ regionMap(imc, cellType = "clusters", region = "cell_type") +
 
 **Checking Cluster Frequencies**
 
-We find it always useful to check the number of cells in each cluster. Here we can see that cluster 3 contains lots of (most likely tumour) cells and cluster 7 contains very few cells.
+We find it always useful to check the number of cells in each cluster.
 
 ```{r}
 # Check cluster frequencies.
@@ -802,7 +802,7 @@ testRegions
 
 1. Do the conclusions change using more or less regions?
 
-# ClassifyR: Classification of IMC data
+## ClassifyR for classification of IMC data
 
 Our ClassifyR package, <https://github.com/SydneyBioX/ClassifyR>, formalises a convenient framework for evaluating classification in R. We provide functionality to easily include four key modelling stages; Data transformation, feature selection, classifier training and prediction; into a cross-validation loop. Here we use the `crossValidate` function to perform 20 repeats of 5-fold cross-validation to evaluate the performance of an `randomForest` applied to three quantification of our IMC data; cell type proportions, average pairwise distances between cell-types and region proportions.
 
