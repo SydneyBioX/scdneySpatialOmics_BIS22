@@ -73,12 +73,10 @@ suppressPackageStartupMessages({
   library(batchelor)
   library(patchwork)
   library(plotly)
-  # library(FuseSOM)
-  # library(ggpubr)
-  # library(scater)
-  # library(spicyR)
-  # library(ClassifyR)
-  # library(lisaClust)
+  library(FuseSOM)
+  library(spicyR)
+  library(lisaClust)
+  library(ClassifyR)
 })
 
 nCores <- 4
