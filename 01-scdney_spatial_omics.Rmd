@@ -753,7 +753,7 @@ hatchingPlot(imc,
 )
 ```
 
-**Test for changes in cell type proportions**
+**Visualise proportions of cells from different regions**
 
 ```{r}
 regionProp <- getProp(imc, feature = "region", imageID = "image_name")
@@ -806,6 +806,9 @@ testRegions
 
 Our ClassifyR package, <https://github.com/SydneyBioX/ClassifyR>, formalises a convenient framework for evaluating classification in R. We provide functionality to easily include four key modelling stages; Data transformation, feature selection, classifier training and prediction; into a cross-validation loop. Here we use the `crossValidate` function to perform 20 repeats of 5-fold cross-validation to evaluate the performance of an `randomForest` applied to three quantification of our IMC data; cell type proportions, average pairwise distances between cell-types and region proportions.
 
+In particular, we are evaluating the effectiveness of classifying islets from 
+people with reent onset versus long-duration diabetes.
+
 ```{r message=FALSE}
 # Create list to store data.frames
 data <- list()
@@ -835,7 +838,7 @@ rownames(df) <- df$image_name
 outcome <- df$patient_stage
 names(outcome) <- df$image_name
 
-# Only use onset vs non-diabetic
+# Only use onset vs long-duration
 outcome <- outcome[outcome %in% c("Long-duration", "Onset")]
 outcome <- factor(outcome)
 
