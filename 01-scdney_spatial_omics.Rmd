@@ -381,7 +381,7 @@ random selection among all the cells using the `thin` function.
 
 ```{r}
 scHOT_spatial <- scHOT_addTestingScaffold(scHOT_spatial, gene_to_test)
-scHOT_spatial@testingScaffold
+head(scHOT_spatial@testingScaffold)
 
 scHOT_spatial <- scHOT_setWeightMatrix(scHOT_spatial, span = 0.2)
 scHOT_spatial@weightMatrix <- thin(scHOT_spatial@weightMatrix, n = 50)
@@ -487,9 +487,9 @@ topgenes = rownames(output_sorted)[1:5]
 reducedDim(scHOT_spatial, "spatialCoords") <- reducedDim(spe, "spatialCoords")[colnames(scHOT_spatial),]
 
 for (topgene in topgenes) {
-  g_spe = plotReducedDim(spe, "spatialCoords", colour_by = c(topgenes[1]), point_size = 1) +
+  g_spe = plotReducedDim(spe, "spatialCoords", colour_by = c(topgene), point_size = 1) +
     coord_fixed()
-  g_scHOT = plotReducedDim(scHOT_spatial, "spatialCoords", colour_by = c(topgenes[1]), point_size = 1,
+  g_scHOT = plotReducedDim(scHOT_spatial, "spatialCoords", colour_by = c(topgene), point_size = 1,
                            by_exprs_values = "expression") +
     coord_fixed()
   g_all = g_scHOT + g_spe
@@ -846,21 +846,22 @@ measurements <- lapply(data, function(x) x[names(outcome), ])
 
 # Set seed
 set.seed(51773)
-# Perform cross-validation of an elastic net model
-# with 100 repeats of 5-fold cross-validation.
+# Perform cross-validation of a randomForest model
+# for timing reasons we select a scheme
+# with 10 repeats of 3-fold cross-validation.
 cv <- crossValidate(
   measurements = measurements,
   outcome = outcome,
   classifier = "randomForest",
-  nFolds = 5,
-  nRepeats = 20,
+  nFolds = 3,
+  nRepeats = 10,
   nCores = nCores
 )
 ```
 
 **Visualise cross-validated prediction performance**
 
-Here, we use the `performancePlot` function to assess the AUC from each repeat of the 5-fold cross-validation. We see that the lisaClust regions appear to capture information which is predictive of diabetes progression status of the patients.
+Here, we use the `performancePlot` function to assess the AUC from each repeat of the 5-fold cross-validation. We see that the lisaClust regions appear to capture the least amount of information that is predictive of diabetes progression status of the patients.
 
 ```{r}
 # Calculate AUC for each cross-validation repeat and plot.
