@@ -5,14 +5,14 @@ params:
 author:
 - name: Shila Ghazanfar
   affiliation:  
-  - School of Mathematics and Statistics, University of Sydney, Australia
+  - School of Mathematics and Statistics, University of Sydney, Australia; 
   - Charles Perkins Centre, University of Sydney, Australia
 - name: Nicholas Robertson
   affiliation:
   - School of Mathematics and Statistics, University of Sydney, Australia
 - name: Ellis Patrick
   affiliation:
-  - &WIMR Westmead Institute for Medical Research, University of Sydney, Australia
+  - &WIMR Westmead Institute for Medical Research, University of Sydney, Australia; 
   - School of Mathematics and Statistics, University of Sydney, Australia
 date: 21 November, 2022
 output:
@@ -70,7 +70,9 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(scater)
   library(scuttle)
-  # library(simpleSeg)
+  library(batchelor)
+  library(patchwork)
+  library(plotly)
   # library(FuseSOM)
   # library(ggpubr)
   # library(scater)
@@ -83,6 +85,8 @@ nCores <- 4
 BPPARAM <- simpleSeg:::generateBPParam(nCores)
 
 theme_set(theme_classic())
+
+source("data/celltype_colours.R")
 ```
 
 # Introduction
@@ -99,14 +103,16 @@ We will use two motivating datasets:
     2022](https://www.nature.com/articles/s41587-021-01006-2): A seqFISH
     study of early mouse organogenesis. We will use a subset of data
     that is made available from the
-    [STExampleData](https://bioconductor.org/packages/release/data/experiment/html/STexampleData.html)
+    [`STExampleData`](https://bioconductor.org/packages/release/data/experiment/html/STexampleData.html)
     package.
 
 -   [(Damond et al,
     2019)](https://www.cell.com/cell-metabolism/fulltext/S1550-4131(18)30691-0):
     An Imaging Mass Cytometry (IMC) dataset profiling the spatial
     landscape of pancreatic islets in subjects with long-duration
-    diabetes, recent onset diabetes and controls. The key conclusion of
+    diabetes, recent onset diabetes and controls. The data is downloaded 
+    using the [`imcdatasets`](https://bioconductor.org/packages/release/data/experiment/html/imcdatasets.html) 
+    package. The key conclusion of
     this manuscript (amongst others) is that spatial organisation of
     cells is indicative of diabetes progress. We will examine this data
     and assess a similar question using the packages in scdney.
@@ -135,69 +141,751 @@ coordinates by a matrix to flip the y-axis and ensure we fix the aspect ratio.
 spe <- logNormCounts(spe)
 coord_transform = matrix(c(1,0,0,-1), 2, 2, byrow = TRUE)
 reducedDim(spe, "spatialCoords") <- spatialCoords(spe) %*% coord_transform
-plotReducedDim(spe, "spatialCoords", colour_by = c("Sox2"), point_size = 0.5) +
+plotReducedDim(spe, "spatialCoords", colour_by = c("Sox2"), point_size = 1) +
   coord_fixed()
 ```
 
+**Questions**
+
+1.  How many cells are in this data?
+2.  How many genes?
+3.  Plot gene expression mapping point size to the cell area.
+
+```{r}
+# try to answer the above question using the spe object. 
+# you may want to check the SingleCellExperiment vignette.
+# https://bioconductor.org/packages/3.16/bioc/vignettes/SingleCellExperiment/inst/doc/intro.html
 
 
+```
+
+We can perform a typical gene-expression based analysis for this data. Later 
+in part two we will perform some specific analytical techniques, but for now 
+let's explore the dataset and use methods designed for single cell data.
+
+Dimensionality reduction using PCA, batch correction across tiles using the
+`batchelor` package, followed by UMAP and plotting.
+
+```{r}
+spe <- runPCA(spe)
+
+b.out = batchelor::batchCorrect(spe, batch = spe$pos, assay.type = "logcounts", PARAM=FastMnnParam(d=20))
+reducedDim(spe, "FastMnn") <- reducedDim(b.out, "corrected")
+spe <- runUMAP(spe, dimred = "FastMnn")
+spe
+
+g_celltype_umap = plotReducedDim(spe, "UMAP", colour_by = "celltype_mapped_refined") + 
+  scale_colour_manual(values = celltype_colours)
+g_celltype_umap
+
+plotReducedDim(spe, "UMAP", colour_by = "Sox2")
+
+g_celltype_spatial = plotReducedDim(spe, "spatialCoords", colour_by = "celltype_mapped_refined") + 
+  scale_colour_manual(values = celltype_colours) + 
+  coord_fixed()
+
+g_all = g_celltype_spatial + theme(legend.position = "none") + g_celltype_umap
+g_all
+```
+
+**Advanced/Extension Question**
+
+1.  What considerations need to be made for batch correction of spatial data?
+What assumptions are being made and/or broken? How could you check this?
+2.  Check out the [`ggiraph`](https://davidgohel.github.io/ggiraph/index.html) 
+package for extending the `g_all` object to an interactive plot with a 
+tooltip that links the spatial and UMAP coordinate systems. (Hint: This
+may involve generating a new ggplot object outside of the `plotReducedDim`
+function.)
+
+```{r}
+# try to examine answer the above questions using the spe object. 
+# you may want to set up some small simulation..
 
 
+```
 
+At this point we will pause our examination of the seqFISH dataset that is in 
+the object `spe`, and turn over to the second example dataset. In the second
+part we will revisit this data for performing `scHOT` testing.
 
 ## 1.2: IMC
 
-Here we download the IMC data. This is also a `SpatialExperiment` 
-object.
+Here we download a subset of the IMC data from the `imcdatasets` package. This 
+is also a `SpatialExperiment` object.
 
 ```{r}
 imc <- imcdatasets::Damond_2019_Pancreas(data_type = "spe")
 imc
 ```
 
+**Questions**
+
+1.  How many cells are in this data?
+2.  How many markers? How many images?
+3.  Are there any interesting patient characteristics?
+
+```{r}
+# try to answer the above question using the imc object. 
+# you may want to check the SingleCellExperiment vignette.
+# https://bioconductor.org/packages/3.16/bioc/vignettes/SingleCellExperiment/inst/doc/intro.html
 
 
+```
 
+To make things faster and less computationally demanding, we'll subset the data
+down to 60 pancreatic islets from an equal number of non-diabetic, recent
+onset and long-duration diabetics.
 
+```{r}
+# set the seed so the sampling is determined
+set.seed(51773)
 
+# sample 20 image names from the 3 conditions
+useImages <- c(
+  sample(imc$image_name[imc$patient_stage == "Non-diabetic"], 20),
+  sample(imc$image_name[imc$patient_stage == "Onset"], 20),
+  sample(imc$image_name[imc$patient_stage == "Long-duration"], 20)
+)
 
+# subset the data with the images names we sampled
+imc <- imc[, imc$image_name %in% useImages]
+```
+
+As our data is stored in a `SpatialExperiment`, as we did previously, we can 
+use `scater` to perform and visualise our data in a lower dimensional embedding 
+to look for image or cluster differences.
+
+```{r, fig.width=5, fig.height=5}
+set.seed(51773)
+# Perform dimension reduction using UMAP.
+imc <- scater::runUMAP(imc, exprs_values = "counts", name = "UMAP_raw")
+
+# UMAP by imageID.
+scater::plotReducedDim(imc, dimred = "UMAP_raw", colour_by = "image_name")
+```
+
+**Questions**
+
+1.  Is this UMAP highlighting any "interesting" structure in the data?
+2.  What does it mean that cells from different images cluster together? Can you modify this to look for relationships to disease stage?
+3.  One of the columns contains the cell types defined by Damond et al., are these cell types separated on the UMAP?
+
+```{r}
+# try to answer the questions here!
+
+```
+
+We should check to see if the marker intensities of each cell require some form of transformation or normalisation to control for subtle systematic differences that may have emerged during measurement.
+
+Here, we extract the intensities from the `counts` assay. Looking at SMA, which should be expressed in the majority of the stromal cells, we can see that the intensities are clearly very skewed and the peaks of the lower intensities don't overlap.
+
+```{r, fig.width=5, fig.height=5}
+# Extract marker data and bind with information about images
+df <- as.data.frame(cbind(colData(imc), t(assay(imc, "counts"))))
+
+# Plots densities of PanKRT for each image.
+ggplot(df, aes(x = sqrt(SMA), colour = image_name)) +
+  geom_density() +
+  theme(legend.position = "none") +
+  xlim(0,4) +
+  labs(x = "SMA", y = "Density by Image")
+```
+
+We can transform and normalise our data using the `normalizeCells` function. Here we have taken the intensities from the `counts` assay, performed an inverse hyperbolic sine transform, then for each image trimmed the 99 quantile, scaled the means to be equal and then removed the first principal component. This modified data is then store in the `norm` assay by default. We can see that this normalised data appears to align more, not perfect, but likely sufficient for clustering.
+
+```{r, fig.width=5, fig.height=5}
+# Transform and normalise the marker expression of each cell type.
+# Use a square root transform, then trimmed the 99 quantile
+imc <- normalizeCells(imc,
+  transformation = "asinh",
+  method = c("trim99", "mean", "PC1"),
+  assayIn = "counts",
+  cores = nCores,
+  imageID = "image_name"
+)
+# Extract normalised marker information.
+df <- as.data.frame(cbind(colData(imc), t(assay(imc, "norm"))))
+# Plots densities of normalised PanKRT for each image.
+ggplot(df, aes(x = SMA, colour = image_name)) +
+  geom_density() +
+  theme(legend.position = "none")
+```
+
+**Questions**
+
+1.  Do different normalisation methods (e.g., 'mean', 'minMax', 'trim99', 'PC1') looks different?
+2.  What about different markers?
+
+```{r}
+# try to answer the questions here!
+
+```
+
+At this point you should have a sense of the data structure and feel confident
+in generating visualisations and finding information on how to perform other
+kinds of explorations. Time for a few minutes to stand up and stretch and get 
+ready for Part 2.
 
 # Part 2: Analytical techniques
 
+Now that are we are comfortable with the two datasets, let's perform some
+analytical techniques that are specific to spatial omics data.
 
+## scHOT analysis of the developing brain
 
-
-# Global paramaters
-
-It is convenient to set the number of cores for running code in
-parallel. Please choose a number that is appropriate for your resources.
+Here we will ask which gene patterns we observe to be changing across the
+spe$gutRegion cell type in space. Note that we want to assess
+the anatomical region corresponding to the anterior end of the developing gut
+developing brain so we will first subset the cells using the spatial 
+coordinates. We can check what we have selected by plotting.
 
 ```{r}
-# nCores <- 20
-# BPPARAM <- simpleSeg:::generateBPParam(nCores)
-# theme_set(theme_classic())
+spe$gutRegion = spe$celltype_mapped_refined == "Gut tube" &
+  reducedDim(spe, "spatialCoords")[,1] < -0.5
+
+plotReducedDim(spe, "spatialCoords", colour_by = "gutRegion") + 
+  coord_fixed() + 
+  scale_colour_manual(values = c("TRUE" = "red", "FALSE" = "grey"))
 ```
 
-# Context
+Let's subset the data to only these cells and continue with our scHOT analysis.
 
-In the following we will reanalyse some MIBI-TOF data [(Risom et al,
-2022)](https://www.sciencedirect.com/science/article/pii/S0092867421014860?via%3Dihub#!)
-profiling the spatial landscape of ductal carcinoma in situ (DCIS),
-which is a pre-invasive lesion that is thought to be a precursor to
-invasive breast cancer (IBC). The key conclusion of this manuscript
-(amongst others) is that spatial information about cells can be used to
-predict disease progression in patients. We will use our spicy workflow
-to make a similar conclusion.
+```{r}
+spe_gut = spe[,spe$gutRegion]
+spe_gut
+```
 
-The R code for this analysis is available on github
-<https://github.com/SydneyBioX/spicyWorkflow>. A mildly
-[processed](https://github.com/SydneyBioX/spicyWorkflow/blob/master/organisePublishedData.R)
-version of the data used in the manuscript is available in this
-repository.
+We select genes with at least some proportion of expressed cells for testing, 
+and create the `scHOT` object.
 
-# Read in images
+```{r}
+hist(rowMeans(counts(spe_gut)>0), 40)
+
+gene_to_test = as.matrix(c(rownames(spe_gut[rowMeans(counts(spe_gut)>0) > 0.2,])))
+length(gene_to_test)
+rownames(gene_to_test) <- apply(gene_to_test, 1, paste0, collapse = "_")
+head(gene_to_test)
+
+scHOT_spatial <- scHOT_buildFromSCE(spe_gut,
+                                    assayName = "logcounts",
+                                    positionType = "spatial",
+                                    positionColData = c("x_global_affine", "y_global_affine"))
+
+scHOT_spatial
+```
+
+We now add the testing scaffold to the `scHOT` object, and set the local
+weight matrix for testing, with a choice of span of 0.1 (the proportion
+of cells to weight around each cell).  We can speed up computation by not
+requiring the weight matrix correspond to every individual cell, but instead a
+random selection among all the cells using the `thin` function.
+
+```{r}
+scHOT_spatial <- scHOT_addTestingScaffold(scHOT_spatial, gene_to_test)
+scHOT_spatial@testingScaffold
+
+scHOT_spatial <- scHOT_setWeightMatrix(scHOT_spatial, span = 0.2)
+scHOT_spatial@weightMatrix <- thin(scHOT_spatial@weightMatrix, n = 50)
+
+dim(slot(scHOT_spatial, "weightMatrix"))
+```
+
+For a given cell we can visually examine the local weight given by the span
+parameter.
+
+```{r}
+cellID = 10
+ggplot(cbind(as.data.frame(colData(scHOT_spatial)),
+             W = slot(scHOT_spatial, "weightMatrix")[cellID,]),
+       aes(x = x_global_affine, y = -y_global_affine)) +
+  geom_point(aes(colour = W,
+                 size = W)) +
+  scale_colour_gradient(low = "black", high = "purple") +
+  scale_size_continuous(range = c(0.5,2.5)) +
+  theme_classic() +
+  guides(colour = guide_legend(title = "Spatial Weight"),
+         size = guide_legend(title = "Spatial Weight")) +
+  ggtitle(paste0("Central cell: ", cellID)) + 
+  coord_fixed() +
+  NULL
+```
+
+**Question**
+
+1. How will the results change if the span is increased/decreased?
+
+```{r}
+## Make associated changes to the code to test out the question above.
+```
+
+We set the higher order function as the weighted mean function, and then 
+calculate the observed higher order test statistics. This may take around 10 
+seconds.
+
+```{r}
+scHOT_spatial <- scHOT_calculateGlobalHigherOrderFunction(
+    scHOT_spatial,
+    higherOrderFunction = weightedMean,
+    higherOrderFunctionType = "weighted")
+
+slot(scHOT_spatial, "scHOT_output")
+
+scHOT_spatial <- scHOT_calculateHigherOrderTestStatistics(
+    scHOT_spatial, na.rm = TRUE)
+```
+
+Now we can plot the overall mean versus the scHOT statistic to observe any 
+relationship. Labels can be interactively visualised using `ggplotly`. Some 
+genes may have different distributions so we turn to 
+permutation testing to assess statistical significance.
+
+```{r}
+g = ggplot(as.data.frame(scHOT_spatial@scHOT_output), 
+           aes(x = globalHigherOrderFunction, y = higherOrderStatistic, label = gene_1)) + 
+  xlab("Mean across all cells") +
+  ylab("scHOT statistic for local weightedMean") +
+  geom_point()
+g
+ggplotly(g)
+```
+
+Set up the permutation testing schema. For the purposes of this workshop we set
+a low number of permutations over a low number of genes in the testing 
+scaffold, you may want to change this as you work through 
+the workshop yourself. The testing will take a few minutes to run, here with
+the parallel parameters that were set at the beginning of this document.
+
+```{r}
+scHOT_spatial <- scHOT_setPermutationScaffold(scHOT_spatial,
+                                              numberPermutations = 50,
+                                              numberScaffold = 30)
+
+scHOT_spatial <- scHOT_performPermutationTest(
+    scHOT_spatial,
+    verbose = TRUE,
+    parallel = FALSE)
+slot(scHOT_spatial, "scHOT_output")
+```
+
+After the permutation test we can estimate the P-values across all genes.
+
+```{r}
+scHOT_plotPermutationDistributions(scHOT_spatial)
+
+scHOT_spatial <- scHOT_estimatePvalues(scHOT_spatial,
+                                       nperm_estimate = 100,
+                                       maxDist = 0.1)
+slot(scHOT_spatial, "scHOT_output")
+```
+
+We can now examine the spatial expression of the 5 most significant genes, 
+both in our scHOT object and over our original spe object.
+
+```{r}
+output_sorted = slot(scHOT_spatial, "scHOT_output")[order(slot(scHOT_spatial, "scHOT_output")$pvalEstimated),]
+topgenes = rownames(output_sorted)[1:5]
+
+reducedDim(scHOT_spatial, "spatialCoords") <- reducedDim(spe, "spatialCoords")[colnames(scHOT_spatial),]
+
+for (topgene in topgenes) {
+  g_spe = plotReducedDim(spe, "spatialCoords", colour_by = c(topgenes[1]), point_size = 1) +
+    coord_fixed()
+  g_scHOT = plotReducedDim(scHOT_spatial, "spatialCoords", colour_by = c(topgenes[1]), point_size = 1,
+                           by_exprs_values = "expression") +
+    coord_fixed()
+  g_all = g_scHOT + g_spe
+  print(g_all)
+}
+```
+
+Here we are noting the genes that are found to have the most statistically 
+significant spatial variation in their local mean expression. These genes point
+to specific patterns that govern the development of individual parts of the 
+gut tube.
+
+**Advanced/Extended Questions**
+
+1. How would you perform such testing over multiple distinct samples? 
+2. scHOT is developed with all higher order testing in mind, use the associated
+[vignette](http://www.bioconductor.org/packages/release/bioc/html/scHOT.html) 
+to get towards assessing changes in variation or correlation 
+structure in space.
+
+```{r}
+## try some code
+
+```
+
+Now that we have assessed genes varying in expression in space, let's look
+further into the IMC data where we will make use of the multiple samples to 
+perform clustering and extract some biological understanding.
+
+## spicyR for the IMC data
+
+First, let's select the markers that we'd like to use to cluster the cells. Clustering partitions the data by the largest sources of variation. If there are lots of markers for a specific cell type, this will cluster very well.
+
+This step requires domain knowledge about how different cells express different markers. Using irrelevant markers to cluster the cells will lead to meaningless clusters.
+
+```{r}
+useMarkers <- c(
+  "NKX6_1", # 	Homeobox protein Nkx-6.1	β	169Tm
+  "IAPP", # 	Amylin	β	167Er
+  "GCG", # 	Glucagon	α	156Gd
+  "PCSK2", # Proprotein convertase 2	α	144Nd
+  "SST", # Somatostatin	δ	159Tb
+  "PPY", # Pancreatic polypeptide	γ	153Eu
+  "PDX1", # Pancreatic and duodenal homeobox 1	β, δ, ductal	158Gd
+  "SYP", # Synaptophysin	Endocrine	160Gd
+  "CD99", # CD99	Endocrine	145Nd
+  "SLC2A1", # Glucose transporter 1	Endocrine	148Nd
+  "PTPRN", # Receptor-type tyrosine-protein phosphatase-like N	Endocrine	174Yb
+  "AMY2A", # Pancreatic amylase	Acinar	150Nd
+  "KRT19", # Cytokeratin 19	Ductal	161Dy
+  "CD44", # CD44	Exocrine	143Nd
+  "CD45", # CD45	Immune	162Dy
+  "CD45RA", # CD45RA	Immune	164Dy
+  "CD3e", # CD3ɛ	T	152Sm
+  "CD4", # CD4	Helper T	171Yb
+  "CD8a", # CD8a	Cytotoxic T	165Ho
+  "CD20", # CD20	B	149Sm
+  "CD68", # CD68	Monocytes, macrophages	146Nd
+  "MPO", # Myeloperoxidase	Neutrophils	147Sm
+  "FOXP3", # Forkhead box P3	Regulatory T	163Dy
+  "CD38", # CD38	Immune	142Nd
+  "CDH1", # E-/P-cadherin	Epithelial	173Yb
+  "CD31", # CD31	Endothelial	172Yb
+  "SMA", # Smooth muscle actin	Stromal	115In
+  "Ki67", # Ki-67	Proliferating	168Er
+  "p_HH3", # Phospho-histone H3	Proliferating	170Er
+  "p_Rb", # Phospho-retinoblastoma	Cycling	175Yb
+  "cPARP_cCASP3", # Cleaved caspase 3 + cleaved poly (ADP-ribose) polymerase	Apoptotic	176Yb
+  "CA9" # Carbonic anhydrase IX	Hypoxic	166Er
+) 
+```
+
+**Clustering**
+
+Here we cluster using the `runFuseSOM` function. We have chosen to specify the same subset of markers used in the original manuscript for gating cell types. We have also specified the number of clusters to identify to be `numClusters = 13`.
+
+```{r}
+set.seed(51773)
+
+imc <- runFuseSOM(imc,
+  markers = useMarkers,
+  assay = "norm",
+  numClusters = 13
+)
+```
+
+**Clusters Selection**
+
+We can check to see how reasonable our choice of 13 clusters is using the `estimateNumCluster` and the `optiPlot` functions. Here we examine the Gap method, others such as Silhouette and Within Cluster Distance are also available.
+
+```{r}
+imc <- estimateNumCluster(imc, kSeq = 2:30)
+optiPlot(imc, method = "gap")
+imc@metadata$clusterEstimation$Discriminant
+```
+
+**Cluster Interpretation**
+
+We can begin the process of understanding what each of these cell clusters are by using the `plotGroupedHeatmap` function from `scater`. At the least, here, we can see we capture a few different populations of islet cells and a few immune cell populates (including CD4+ Tcells and CD8+ Tcells).
+
+```{r, fig.height = 7}
+scater::plotGroupedHeatmap(imc,
+  features = useMarkers,
+  group = "clusters",
+  exprs_values = "exprs",
+  center = TRUE,
+  scale = TRUE,
+  zlim = c(-3, 3),
+  cluster_rows = FALSE
+)
+```
+
+Damond et al. define their cell types using a stepwise clustering procedure with manual merge of clusters. We can compare our clustering to theirs.
+
+```{r fig.width=8}
+regionMap(imc, cellType = "clusters", region = "cell_type") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+**Checking Cluster Frequencies**
+
+We find it always useful to check the number of cells in each cluster. Here we can see that cluster 3 contains lots of (most likely tumour) cells and cluster 7 contains very few cells.
+
+```{r}
+# Check cluster frequencies.
+colData(imc)$clusters |>
+  table() |>
+  sort()
+```
+
+**Visualise cell types in an image**
+
+Look at the distribution of cells types in an image
+
+```{r}
+# Extract cell information and filter to specific image.
+df <- cbind(colData(imc), spatialCoords(imc)) |>
+  as.data.frame() |>
+  filter(image_name == "E02")
+# Colour cells by their region.
+ggplot(df, aes(x = cell_x, y = cell_y, colour = clusters)) +
+  geom_point()
+```
+
+**Questions**
+
+1.  Does changing the normalisation affect the clustering?
+2.  Does changing the number of clusters?
+
+```{r}
+# try to answer the questions here!
+
+```
+
+**Testing Relationships**
+
+Next, we test if there is an association between the proportion of each cell type in our clusters and progression status of disease. To do this, we recommend using a package such as `diffcyt` for testing for changes in abundance of cell types. However, the `colTest` function from `spicyR` allows us to quickly test for associations between the proportions of the cell types and disease status using either Wilcoxon rank sum tests or t-tests. Here we see a couple of p-values less than 0.05.
+
+```{r}
+# Select cells which belong to Non-diabetic individuals and those with recent onset diabetes.
+cellsToUse <- imc$patient_stage %in% c("Non-diabetic", "Onset")
+# Perform simple t tests on the columns of the proportion matrix.
+testProp <- colTest(imc[, cellsToUse],
+  condition = "patient_stage",
+  feature = "clusters",
+  imageID = "image_name"
+)
+testProp
+```
+
+**spicyR: test spatial relationships**
+
+Our package, spicyR, which can be found on [Bioconductor](https://www.bioconductor.org/packages/devel/bioc/html/spicyR.html), provides a series of functions to aid in the analysis of both immunofluorescence and mass cytometry imaging data as well as other assays that can deeply phenotype individual cells and their spatial location. Here, we use the `spicy` function to test for changes in the spatial relationships between pairwise combinations of cells. We quantify spatial relationships using a combination of three radii `Rs = c(20, 50, 100)` and mildly account for some global tissue structure using `sigma = 50`.
+
+```{r}
+# Select cells which belong to Non-diabetic individuals and those with recent onset diabetes.
+cellsToUse <- imc$patient_stage %in% c("Non-diabetic", "Onset")
+
+# Test for changes in pairwise spatial relationships between cell types.
+spicyTest <- spicy(imc[, cellsToUse],
+  condition = "patient_stage",
+  cellType = "clusters",
+  imageID = "image_name",
+  spatialCoords = c("cell_x", "cell_y"),
+  Rs = c(20, 50, 100),
+  sigma = 50,
+  BPPARAM = BPPARAM
+)
+topPairs(spicyTest, n = 10)
+```
+
+We can visualise these tests using `signifPlot`.
+
+```{r}
+signifPlot(spicyTest,
+  breaks = c(-1.5, 3, 0.5),
+  cutoff = 0.0001
+)
+```
+
+**Question**
+
+1. Do the results/interpretation change if use Rs = 20 or Rs = 200
+
+
+```{r}
+# try to answer the questions here!
+
+```
+
+**lisaClust: Find cellular neighbourhoods**
+
+Our package, lisaClust, which can be found on [Bioconductor](https://www.bioconductor.org/packages/release/bioc/html/lisaClust.html), provides a series of functions to identify and visualise regions of tissue where spatial associations between cell-types is similar. This package can be used to provide a high-level summary of cell-type colocalisation in multiplexed imaging data that has been segmented at a single-cell resolution. Here we use the `lisaClust` function to clusters cells into 5 regions with distinct spatial ordering.
+
+```{r}
+set.seed(51773)
+# Cluster cells into spatial regions with similar composition.
+imc <- lisaClust(imc,
+  k = 5,
+  Rs = c(20, 50, 100),
+  sigma = 50,
+  spatialCoords = c("cell_x", "cell_y"),
+  cellType = "clusters",
+  imageID = "image_name",
+  BPPARAM = BPPARAM
+)
+```
+
+**Region - cell type enrichment heatmap**
+
+We can try to interpret which spatial orderings the regions are quantifying using the `regionMap` function. This plots the frequency of each cell type in a region relative to what you would expect by chance.
+
+```{r, fig.height=5, fig.width=5}
+# Visualise the enrichment of each cell type in each region
+regionMap(imc, cellType = "clusters", limit = c(0.2, 5))
+```
+
+**Visualise regions**
+
+By default, these identified regions are stored in the `regions` column in the `colData` of our object. We can quickly examine the spatial arrangement of these regions using `ggplot`.
+
+```{r}
+# Extract cell information and filter to specific image.
+df <- cbind(colData(imc), spatialCoords(imc)) |>
+  as.data.frame() |>
+  filter(image_name == "E02")
+# Colour cells by their region.
+ggplot(df, aes(x = cell_x, y = cell_y, colour = region)) +
+  geom_point()
+```
+
+While much slower, we have also implemented a function for overlaying the region information as a hatching pattern so that the information can be viewed simultaneously with the cell type calls.
+
+```{r eval = FALSE}
+# Use hatching to visualise regions and cell types.
+hatchingPlot(imc,
+  imageID = "image_name",
+  useImages = "E02",
+  cellType = "clusters",
+  spatialCoords = c("cell_x", "cell_y"),
+)
+```
+
+**Test for changes in cell type proportions**
+
+```{r}
+regionProp <- getProp(imc, feature = "region", imageID = "image_name")
+
+
+stage <- imc |>
+  colData() |>
+  as.data.frame() |>
+  dplyr::select("image_name", "patient_stage") |>
+  unique() |>
+  mutate(patient_stage = factor(patient_stage, levels = c(
+    "Non-diabetic",
+    "Onset",
+    "Long-duration"
+  )))
+
+
+df <- regionProp |>
+  mutate(image_name = rownames(regionProp)) |>
+  dplyr::right_join(stage, by = "image_name") |>
+  tidyr::pivot_longer(
+    cols = starts_with("region"),
+    names_to = "region",
+    values_to = "proportion"
+  )
+
+ggplot(df, aes(x = region, y = proportion, colour = patient_stage)) +
+  geom_boxplot()
+```
+
+**Test for changes in proportions of the regions**
+
+```{r}
+# Select cells which belong to Non-diabetic individuals and those with recent onset diabetes.
+cellsToUse <- imc$patient_stage %in% c("Non-diabetic", "Onset")
+# Perform simple t tests on the columns of the proportion matrix.
+testRegions <- colTest(imc[, cellsToUse],
+  condition = "patient_stage",
+  feature = "region",
+  imageID = "image_name"
+)
+testRegions
+```
+
+**Question**
+
+1. Do the conclusions change using more or less regions?
+
+# ClassifyR: Classification of IMC data
+
+Our ClassifyR package, <https://github.com/SydneyBioX/ClassifyR>, formalises a convenient framework for evaluating classification in R. We provide functionality to easily include four key modelling stages; Data transformation, feature selection, classifier training and prediction; into a cross-validation loop. Here we use the `crossValidate` function to perform 20 repeats of 5-fold cross-validation to evaluate the performance of an `randomForest` applied to three quantification of our IMC data; cell type proportions, average pairwise distances between cell-types and region proportions.
+
+```{r message=FALSE}
+# Create list to store data.frames
+data <- list()
+# Add proportions of each cell type in each image
+data[["props"]] <- getProp(imc, feature = "clusters", imageID = "image_name")
+# Add pairwise associations
+data[["dist"]] <- getPairwise(imc,
+  spatialCoords = c("cell_x", "cell_y"),
+  imageID = "image_name",
+  cellType = "clusters",
+  Rs = c(20, 50, 100),
+  sigma = 50,
+  BPPARAM = BPPARAM
+)
+
+data[["dist"]] <- as.data.frame(data[["dist"]])
+
+# Add proportions of each region in each image
+# to the list of dataframes.
+data[["regions"]] <- getProp(imc, feature = "region", imageID = "image_name")
+
+# Get outcome data
+df <- colData(imc)[, c("image_name", "patient_stage")]
+df <- unique(df)
+rownames(df) <- df$image_name
+
+outcome <- df$patient_stage
+names(outcome) <- df$image_name
+
+# Only use onset vs non-diabetic
+outcome <- outcome[outcome %in% c("Long-duration", "Onset")]
+outcome <- factor(outcome)
+
+measurements <- lapply(data, function(x) x[names(outcome), ])
+
+# Set seed
+set.seed(51773)
+# Perform cross-validation of an elastic net model
+# with 100 repeats of 5-fold cross-validation.
+cv <- crossValidate(
+  measurements = measurements,
+  outcome = outcome,
+  classifier = "randomForest",
+  nFolds = 5,
+  nRepeats = 20,
+  nCores = nCores
+)
+```
+
+**Visualise cross-validated prediction performance**
+
+Here, we use the `performancePlot` function to assess the AUC from each repeat of the 5-fold cross-validation. We see that the lisaClust regions appear to capture information which is predictive of diabetes progression status of the patients.
+
+```{r}
+# Calculate AUC for each cross-validation repeat and plot.
+performancePlot(cv,
+  performanceName = "AUC",
+  characteristicsList = list(x = "Assay Name")
+)
+```
+
+**Questions**
+
+1. Could we use different classifiers? 
+
+2. What is the balanced accuracy? Why would we select this measure instead?
+
+```{r}
+# Try the code!
+```
 
 # Summary
+
+This workshop has shown how to explore some processed spatial transcriptomic
+and IMC datasets, as well as perform analytical techniques made available 
+in the scdney package. We hope you enjoyed the session and will continue using
+some of the ideas and tools we showed you for your own research questions. 
+Reach out to the team either directly or via the [Github](https://github.com/sydneybiox).
 
 # Version and Session Info
 
