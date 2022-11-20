@@ -41,7 +41,9 @@ First, download the files in this Github repository by either cloning the
 repository or by downloading the files directly into a directory on your
 computer.
 
-Next, we will worth through two key examples with datasets.
+In the workshop, we will worth through two key examples with datasets. The 
+first part will involve examining the data structure and exploratory data 
+analysis. The second part will involve analytical techniques.
 
 ### Dev container option
 

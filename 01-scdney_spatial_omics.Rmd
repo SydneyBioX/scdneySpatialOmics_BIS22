@@ -15,63 +15,162 @@ author:
   - &WIMR Westmead Institute for Medical Research, University of Sydney, Australia
   - School of Mathematics and Statistics, University of Sydney, Australia
 date: 21 November, 2022
-output: 
-  BiocStyle::html_document
+output:
+  html_document:
+    css: style.css
+    code_folding: show
+    fig_height: 12
+    fig_width: 12
+    toc: yes
+    number_sections: true
+    toc_depth: 3
+    toc_float: yes
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r setup, include=FALSE, message=FALSE}
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE, message = FALSE, warning = FALSE, cache.lazy = FALSE)
-library(BiocStyle)
 ```
 
-# Version Info
+# Pre-work
 
-<p>
-**R version**: `r R.version.string`
-<br />
-**Bioconductor version**: `r BiocManager::version()`
-<br />
+Prior to the workshop, we recommend you start by:
 
-# Part I: Data structures and exploratory data analysis
+-   Having the latest version of R installed (at least 4.2)
 
-## 
+-   Having the latest version of RStudio installed
 
+-   Installing the `scdney` package, instructions can be found
+    [here](https://sydneybiox.github.io/scdney/).
+
+-   Installing the `STexampleData` package Bioconductor and associated
+    dependencies
+
+-   Installing the `imcdatasets` package from Bioconductor and
+    associated dependencies
+    
+-   Installing the `simpleSeg` package from Bioconductor and
+    associated dependencies
+
+::: {style="background-color:#e6f0ff"}
+If you use use RStudio, we recommend viewing this document in visual
+mode.
+:::
+
+# Loading R packages and setting parameters
 
 ```{r}
-if (!require("BiocManager", quietly = TRUE))
-  install.packages("BiocManager")
-
-BiocManager::install("STexampleData")
-
-out = STexampleData::seqFISH_mouseEmbryo()
-
-```
-
-
-# Loading R packages
-
-```{r, echo=FALSE, results="hide", warning=FALSE}
 suppressPackageStartupMessages({
-library(scdney)
-# library(dplyr)
-# library(ggplot2)
-# library(simpleSeg)
-# library(FuseSOM)
-# library(ggpubr)
-# library(scater)
-# library(spicyR)
-# library(ClassifyR)
-# library(lisaClust)
+  library(scdney)
+  library(STexampleData)
+  library(imcdatasets)
+  library(simpleSeg)
+  library(ggplot2)
+  library(scater)
+  library(scuttle)
+  # library(simpleSeg)
+  # library(FuseSOM)
+  # library(ggpubr)
+  # library(scater)
+  # library(spicyR)
+  # library(ClassifyR)
+  # library(lisaClust)
 })
+
+nCores <- 4
+BPPARAM <- simpleSeg:::generateBPParam(nCores)
+
+theme_set(theme_classic())
 ```
 
-```{r, eval=FALSE}
-library(scdney)
+# Introduction
+
+This is the main working document for the Unlocking single cell spatial
+omics analyses with [scdney](https://sydneybiox.github.io/scdney/)
+workshop. We recommend you download a local copy of the Rmd file and
+while running through the analysis scripts see what edits or additions
+you would make.
+
+We will use two motivating datasets:
+
+-   [Lohoff et al,
+    2022](https://www.nature.com/articles/s41587-021-01006-2): A seqFISH
+    study of early mouse organogenesis. We will use a subset of data
+    that is made available from the
+    [STExampleData](https://bioconductor.org/packages/release/data/experiment/html/STexampleData.html)
+    package.
+
+-   [(Damond et al,
+    2019)](https://www.cell.com/cell-metabolism/fulltext/S1550-4131(18)30691-0):
+    An Imaging Mass Cytometry (IMC) dataset profiling the spatial
+    landscape of pancreatic islets in subjects with long-duration
+    diabetes, recent onset diabetes and controls. The key conclusion of
+    this manuscript (amongst others) is that spatial organisation of
+    cells is indicative of diabetes progress. We will examine this data
+    and assess a similar question using the packages in scdney.
+
+# Part 1: Data structures and exploratory data analysis
+
+Here we will download the datasets, examine the structure and perform some 
+exploratory analyses. This might take a few moments and you may be prompted
+to install some additional packages.
+
+## 1.1: seqFISH
+
+Here we download the seqFISH mouse embryo data. This is a `SpatialExperiment` 
+object, which extends the `SingleCellExperiment` object.
+
+```{r}
+spe = STexampleData::seqFISH_mouseEmbryo()
+spe
 ```
+
+We can use functions designed for `SingleCellExperiment` objects in the 
+`scater` package for plotting via the `reducedDim` slot. We multiply the spatial
+coordinates by a matrix to flip the y-axis and ensure we fix the aspect ratio.
+
+```{r}
+spe <- logNormCounts(spe)
+coord_transform = matrix(c(1,0,0,-1), 2, 2, byrow = TRUE)
+reducedDim(spe, "spatialCoords") <- spatialCoords(spe) %*% coord_transform
+plotReducedDim(spe, "spatialCoords", colour_by = c("Sox2"), point_size = 0.5) +
+  coord_fixed()
+```
+
+
+
+
+
+
+
+## 1.2: IMC
+
+Here we download the IMC data. This is also a `SpatialExperiment` 
+object.
+
+```{r}
+imc <- imcdatasets::Damond_2019_Pancreas(data_type = "spe")
+imc
+```
+
+
+
+
+
+
+
+
+# Part 2: Analytical techniques
+
+
+
 
 # Global paramaters
 
-It is convenient to set the number of cores for running code in parallel. Please choose a number that is appropriate for your resources.
+It is convenient to set the number of cores for running code in
+parallel. Please choose a number that is appropriate for your resources.
 
 ```{r}
 # nCores <- 20
@@ -81,24 +180,32 @@ It is convenient to set the number of cores for running code in parallel. Please
 
 # Context
 
-In the following we will reanalyse some MIBI-TOF data [(Risom et al, 2022)](https://www.sciencedirect.com/science/article/pii/S0092867421014860?via%3Dihub#!) profiling the spatial landscape of ductal carcinoma in situ (DCIS), which is a pre-invasive lesion that is thought to be a precursor to invasive breast cancer (IBC). The key conclusion of this manuscript (amongst others) is that spatial information about cells can be used to predict disease progression in patients. We will use our spicy workflow to make a similar conclusion.
+In the following we will reanalyse some MIBI-TOF data [(Risom et al,
+2022)](https://www.sciencedirect.com/science/article/pii/S0092867421014860?via%3Dihub#!)
+profiling the spatial landscape of ductal carcinoma in situ (DCIS),
+which is a pre-invasive lesion that is thought to be a precursor to
+invasive breast cancer (IBC). The key conclusion of this manuscript
+(amongst others) is that spatial information about cells can be used to
+predict disease progression in patients. We will use our spicy workflow
+to make a similar conclusion.
 
-The R code for this analysis is available on github [https://github.com/SydneyBioX/spicyWorkflow](https://github.com/SydneyBioX/spicyWorkflow). A mildly [processed](https://github.com/SydneyBioX/spicyWorkflow/blob/master/organisePublishedData.R) version of the data used in the manuscript is available in this repository. 
-
-
+The R code for this analysis is available on github
+<https://github.com/SydneyBioX/spicyWorkflow>. A mildly
+[processed](https://github.com/SydneyBioX/spicyWorkflow/blob/master/organisePublishedData.R)
+version of the data used in the manuscript is available in this
+repository.
 
 # Read in images
 
-The images are stored in the `images` folder within the `data` folder. Here we use `readImages()` from the `EBImage` package to read these into R. If memory is a restricting factor, and the files are in a slightly different format, you could use `loadImages()` from the `cytomapper` package to load all the tiff images into a `CytoImageList` object, which can store the images as h5 on-disk.
-
-
-
-
-
-
-
-
 # Summary
 
-Here we have used a pipeline of our spatial analysis R packages to demonstrate an easy way to segment, cluster, normalise, quantify and classify high dimensional in situ cytometry data all within R.
-Footer
+# Version and Session Info
+
+<p>
+
+**R version**: `r R.version.string` <br /> **Bioconductor version**:
+`r BiocManager::version()` <br />
+
+```{r}
+sessionInfo()
+```
